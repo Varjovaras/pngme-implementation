@@ -1,20 +1,87 @@
 use crate::Error;
+use std::{
+    fmt::{self, Display, Formatter},
+    str::FromStr,
+};
 
+#[derive(Debug)]
 struct ChunkType {
     bytes: [u8; 4],
 }
 
-impl ChunkType {}
+impl ChunkType {
+    fn bytes(&self) -> [u8; 4] {
+        self.bytes
+    }
+
+    fn is_valid(&self) -> bool {
+        self.bytes
+            .iter()
+            .all(|&b| (65..=90).contains(&b) || (97..=122).contains(&b))
+            && self.is_reserved_bit_valid()
+    }
+
+    fn is_critical(&self) -> bool {
+        self.bytes[0] >> 5 & 1 == 0
+    }
+    fn is_public(&self) -> bool {
+        self.bytes[1] >> 5 & 1 == 0
+    }
+    fn is_reserved_bit_valid(&self) -> bool {
+        self.bytes[2] >> 5 & 1 == 0
+    }
+    fn is_safe_to_copy(&self) -> bool {
+        self.bytes[3] >> 5 & 1 == 1
+    }
+}
 
 impl TryFrom<[u8; 4]> for ChunkType {
-    fn try_from(value: [u8; 4]) -> Result<Self, Error> {}
+    type Error = Error;
+    fn try_from(value: [u8; 4]) -> Result<Self, Error> {
+        Ok(Self { bytes: value })
+    }
+}
+
+impl FromStr for ChunkType {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Error> {
+        let bytes: Vec<u8> = s.bytes().collect();
+        if bytes.len() != 4 {
+            return Err("Input string length must be exactly 4 characters".into());
+        }
+
+        let bytes_array = [bytes[0], bytes[1], bytes[2], bytes[3]];
+
+        if !bytes_array
+            .iter()
+            .all(|&b| (65..=90).contains(&b) || (97..=122).contains(&b))
+        {
+            return Err("Input string must contain only ASCII alphabetic characters".into());
+        }
+
+        Ok(Self { bytes: bytes_array })
+    }
+}
+
+impl PartialEq for ChunkType {
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes == other.bytes
+    }
+}
+
+// impl Eq for ChunkType {}
+
+impl Display for ChunkType {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let s = String::from_utf8_lossy(&self.bytes);
+        write!(f, "{}", s)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::convert::TryFrom;
-    use std::str::FromStr;
 
     #[test]
     pub fn test_chunk_type_from_bytes() {
@@ -89,7 +156,6 @@ mod tests {
     pub fn test_invalid_chunk_is_valid() {
         let chunk = ChunkType::from_str("Rust").unwrap();
         assert!(!chunk.is_valid());
-
         let chunk = ChunkType::from_str("Ru1t");
         assert!(chunk.is_err());
     }
